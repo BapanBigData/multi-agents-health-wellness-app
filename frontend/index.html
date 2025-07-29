@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Health & Wellness Agent</title>
+    <style>
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background: #f4f7fa;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        margin: 0;
+      }
+
+      .chat-container {
+        flex: 1;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        border-bottom: 1px solid #ccc;
+      }
+
+      .message {
+        max-width: 80%;
+        margin-bottom: 12px;
+        padding: 12px 16px;
+        border-radius: 14px;
+        line-height: 1.5;
+        white-space: pre-line;
+      }
+
+      .user {
+        align-self: flex-end;
+        background-color: #007bff;
+        color: white;
+        border-top-right-radius: 0;
+      }
+
+      .bot {
+        align-self: flex-start;
+        background-color: #e1e9f0;
+        color: #333;
+        border-top-left-radius: 0;
+      }
+
+      .input-area {
+        display: flex;
+        justify-content: center;
+        padding: 12px;
+        background: #fff;
+        border-top: 1px solid #ccc;
+      }
+
+      .input-area input {
+        width: 100%;
+        max-width: 700px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        font-size: 16px;
+      }
+
+      .input-area button {
+        margin-left: 10px;
+        padding: 10px 18px;
+        font-size: 16px;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .input-area button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .loader {
+        font-style: italic;
+        font-size: 14px;
+        color: #888;
+        padding-left: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="chat-container" id="chat"></div>
+
+    <div class="input-area">
+      <input
+        id="user-input"
+        type="text"
+        placeholder="Ask me about your trip..."
+      />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+      const chat = document.getElementById("chat");
+      const input = document.getElementById("user-input");
+
+      function addMessage(text, type = "bot") {
+        const msg = document.createElement("div");
+        msg.className = `message ${type}`;
+        msg.textContent = text;
+        chat.appendChild(msg);
+        chat.scrollTop = chat.scrollHeight;
+      }
+
+      async function sendMessage() {
+        const userText = input.value.trim();
+        if (!userText) return;
+
+        addMessage(userText, "user");
+        input.value = "";
+
+        const loader = document.createElement("div");
+        loader.className = "loader bot";
+        loader.textContent = "Thinking...";
+        chat.appendChild(loader);
+        chat.scrollTop = chat.scrollHeight;
+
+        try {
+          // ✅ Start job
+          const res = await fetch("/start-plan-trip", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userText }),
+          });
+
+          const { job_id } = await res.json();
+
+          // ✅ Poll job every 2 seconds
+          const interval = setInterval(async () => {
+            const pollRes = await fetch(`/get-response/${job_id}`);
+            const data = await pollRes.json();
+
+            if (data.status === "done" || data.status === "error") {
+              clearInterval(interval);
+              chat.removeChild(loader);
+              addMessage(data.response, "bot");
+            }
+          }, 2000);
+        } catch (err) {
+          chat.removeChild(loader);
+          addMessage("⚠️ Sorry, something went wrong.", "bot");
+        }
+      }
+
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") sendMessage();
+      });
+    </script>
+  </body>
+</html>

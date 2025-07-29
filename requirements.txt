@@ -1,0 +1,15 @@
+# "git+https://github.com/cmu-delphi/epidatpy.git#egg=epidatpy"
+pydantic
+langchain
+langchain-openai
+langchain-groq
+langchain-anthropic
+langchain-core
+langchain-community
+anthropic
+python-dotenv
+langgraph
+fastapi
+uvicorn
+jinja2 
+python-multipart
