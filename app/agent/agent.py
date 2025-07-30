@@ -8,8 +8,7 @@ from app.agent.llm_setup import llm
 from app.agent.router import Router, State
 
 
-
-async def supervisor(state: State) -> Command[Literal["diet_planer_agent", "health_centers_agent", "medication_agent", "symtoms_checker_agent", "air_quality_checker_agent", "__end__"]]:
+async def supervisor(state: State) -> Command[Literal["diet_planer_agent", "exercise_planer_agent", "health_centers_agent", "medication_agent", "symtoms_checker_agent", "air_quality_checker_agent", "__end__"]]:
     """
     The supervisor routes tasks to the appropriate expert agent based on the user's message.
     """
@@ -19,6 +18,7 @@ async def supervisor(state: State) -> Command[Literal["diet_planer_agent", "heal
         Your job is to read the user's message and decide which of the following expert agents should handle the request:
 
         - diet_planer_agent: Creates personalized daily diet plans
+        - exercise_planer_agent: Creates personalized exercise plans
         - health_centers_agent: Finds nearby hospitals, clinics, or test centers
         - medication_agent: Provides drug label info for a given ingredient
         - symtoms_checker_agent: Checks symptoms and suggests possible conditions and actions
@@ -123,6 +123,89 @@ async def diet_planer_agent(state: State) -> Command[Literal["supervisor"]]:
         },
         goto="supervisor"
     )
+
+
+async def exercise_planer_agent(state: State) -> Command[Literal["supervisor"]]:
+    agent = create_react_agent(
+        llm,
+        tools=[],  # no tools; collaborate via prior agent outputs in the conversation
+        prompt="""
+            You are an exercise planning expert. Create a safe, goal-oriented daily exercise plan that collaborates with other agents' outputs if available (diet_planer_agent, symtoms_checker_agent, medication_agent, air_quality_checker_agent, health_centers_agent).
+
+            Rules:
+            - Read the latest conversation. If prior HTML from other agents is present, align the exercise plan with:
+            - Diet goals and timing (from diet_planer_agent)
+            - Symptom flags & cautions (from symtoms_checker_agent)
+            - Medication timing or warnings (from medication_agent)
+            - AQI category and pollutant (from air_quality_checker_agent) — reduce outdoor intensity if AQI is not "Good"
+            - Nearby facility constraints (from health_centers_agent), if relevant
+            - Respect user constraints (e.g., beginner, injuries, “walking only”, diabetes, hypertension).
+            - Keep it practical, time-bound, and safe.
+            - Output **only valid HTML** using the structure below. No markdown, no JSON.
+
+            Wrap the response in:
+            <div class="exercise-plan"> ... </div>
+
+            Use this HTML structure:
+
+            <div class="exercise-plan">
+            <h2>Personalized Exercise Plan</h2>
+
+            <ul>
+                <li><strong>Goal:</strong> [e.g., Weight loss / Cardiovascular fitness / Mobility]</li>
+                <li><strong>Fitness Level:</strong> [Beginner / Intermediate / Advanced]</li>
+                <li><strong>Constraints:</strong> [e.g., Walking-only, knee pain, diabetes, hypertension]</li>
+            </ul>
+
+            <h3>Daily Session</h3>
+            <ul>
+                <li><strong>Warm-up (5–10 min):</strong> [e.g., brisk walk, joint circles]</li>
+                <li><strong>Main Activity (20–45 min):</strong> [e.g., walking intervals / cycling / bodyweight circuit]</li>
+                <li><strong>Cool-down (5–10 min):</strong> [slow walk + stretches]</li>
+                <li><strong>Intensity:</strong> [RPE 4–6 / talk test able to speak in phrases]</li>
+            </ul>
+
+            <h3>Weekly Outline</h3>
+            <ul>
+                <li><strong>Mon:</strong> [Session type & duration]</li>
+                <li><strong>Tue:</strong> [Session type & duration]</li>
+                <li><strong>Wed:</strong> [Session type & duration]</li>
+                <li><strong>Thu:</strong> [Session type & duration]</li>
+                <li><strong>Fri:</strong> [Session type & duration]</li>
+                <li><strong>Sat:</strong> [Session type & duration]</li>
+                <li><strong>Sun:</strong> [Active rest / mobility]</li>
+            </ul>
+
+            <h3>Coordination with Diet</h3>
+            <ul>
+                <li><strong>Pre-workout:</strong> [light snack timing aligned with breakfast/lunch]</li>
+                <li><strong>Post-workout:</strong> [protein + carbs window]</li>
+                <li><strong>Hydration:</strong> [daily target]</li>
+            </ul>
+
+            <h3>Safety & Adjustments</h3>
+            <ul>
+                <li>If experiencing warning symptoms, reduce intensity and consult a professional.</li>
+                <li>If AQI is not "Good", prefer indoor or low-intensity options.</li>
+                <li>Space workouts away from medications that advise avoiding exertion.</li>
+            </ul>
+
+            <p><em>Note:</em> This plan is educational and not a medical diagnosis. Adjust based on professional advice.</p>
+            </div>
+        """
+    )
+
+    result = await agent.ainvoke(state)
+
+    return Command(
+        update={
+            "messages": [
+                HumanMessage(content=result["messages"][-1].content, name="exercise_planer_agent")
+            ]
+        },
+        goto="supervisor"
+    )
+
 
 
 async def health_centers_agent(state: State) -> Command[Literal["supervisor"]]:
