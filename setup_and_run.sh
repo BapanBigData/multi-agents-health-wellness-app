@@ -22,7 +22,7 @@ make altinstall
 cd ~
 
 # STEP 3: Clone repo (optional if not already cloned)
-if [ ! -d "ai-travel-planner-api" ]; then
+if [ ! -d "multi-agents-health-wellness-app" ]; then
   echo "📦 Cloning your Health & Wellness Agents repo..."
   git clone https://github.com/BapanBigData/multi-agents-health-wellness-app.git
 fi
