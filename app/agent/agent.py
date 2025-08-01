@@ -370,6 +370,8 @@ async def air_quality_checker_agent(state: State) -> Command[Literal["supervisor
             - Observed Date
             - Observed Hour (24-hr format)
             - Timezone
+            
+            For Pollutant: after the code, generate a 6–10 word, plain‑language parenthetical that mentions either a common source or a general health effect, using cautious “can/may” phrasing. If code unknown, write “air pollutant; details unknown”.
 
             Wrap the full output in:
             <div class="air-quality-info">...</div>
@@ -383,7 +385,7 @@ async def air_quality_checker_agent(state: State) -> Command[Literal["supervisor
                 <li><strong>State:</strong> {state}</li>
                 <li><strong>Latitude:</strong> {latitude}</li>
                 <li><strong>Longitude:</strong> {longitude}</li>
-                <li><strong>Pollutant:</strong> {pollutant}</li>
+                <li><strong>Pollutant:</strong> {pollutant} ({pollutant_description})</li>
                 <li><strong>AQI:</strong> {aqi}</li>
                 <li><strong>Category:</strong> {category}</li>
                 <li><strong>Observed Date:</strong> {observed_date}</li>
