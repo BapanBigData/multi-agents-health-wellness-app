@@ -1,10 +1,25 @@
 import os
 import requests
-import math
 import httpx
 from langchain_core.tools import tool
-from dotenv import load_dotenv
+from typing import Optional
+import pymongo
+import certifi
+from pymongo.errors import ConnectionFailure
+from app.agent.configs import MONGO_URI, DB_NAME, COLLECTION_NAME
 
+import warnings
+
+# Suppress CosmosDB compatibility warnings from pymongo
+warnings.filterwarnings(
+    "ignore",
+    message="You appear to be connected to a CosmosDB cluster.*",
+    category=UserWarning
+)
+
+
+
+from dotenv import load_dotenv
 load_dotenv()
 
 
@@ -33,54 +48,93 @@ async def location_bbox_search(place):
 
 
 @tool
-async def get_health_centers(city: str, query: str = "hospitals") -> list:
+async def get_health_centers(
+    practice_city_name: str,
+    primary_taxonomy_description: Optional[str] = None,
+    entity_type: str = "Organization",
+    npi_number: Optional[int] = None,
+    provider_first_name: Optional[str] = None,
+    provider_last_name_legal: Optional[str] = None,
+    practice_state_name: Optional[str] = "TX",
+    practice_street_address: Optional[str] = None,
+    limit: int = 20,
+) -> list[dict]:
     """
-    Fetches top health centers (e.g., hospitals, clinics) in a city using the Foursquare API
-    and returns them as a structured JSON list.
+    Locate healthcare providers or facilities using NPI registry data filtered by location, specialty, or name.
 
-    Parameters:
-        city (str): Name of the city (e.g., 'Kolkata')
-        query (str): Type of health centers to search for (e.g., hospitals, clinics)
+    This tool fetches provider or organization records from a MongoDB collection containing NPPES NPI data.
+    It allows filtering by city, state, provider name, taxonomy (specialty), street address, and more.
+    The results are further enriched with geographic coordinates (latitude, longitude) using LocationIQ
+    for integration with maps or proximity-based queries.
+
+    Args:
+        practice_city_name (str): City where the provider or facility is located. (Required)
+        primary_taxonomy_description (Optional[str]): Partial match on provider's specialty (e.g., 'cardiology').
+        entity_type (str): Either 'Organization' or 'Individual'. Default is 'Organization'.
+        npi_number (Optional[int]): Exact NPI number for direct lookup.
+        provider_first_name (Optional[str]): First name of the provider (for individuals).
+        provider_last_name_legal (Optional[str]): Last name of the provider (for individuals).
+        practice_state_name (Optional[str]): State abbreviation (e.g., 'CA', 'NY').
+        practice_street_address (Optional[str]): Partial or full street address.
+        limit (int): Number of records to return. Default is 20.
 
     Returns:
-        list: A list of dictionaries, each containing:
-            - name: Health center name
-            - categories: List of category names
-            - address: Formatted address
-            - latitude: latitude of the address 
-            - longitude: longitude of the address 
-            - phone: Telephone number if available
-            - website: Website URL if available
+        list[dict]: A list of provider/facility records enriched with latitude and longitude, ready for geospatial mapping.
     """
+
     
-    api_key = os.getenv("FOURSQUARE_API_KEY")
-    
-    if not api_key:
-        return [{"error": "Missing FOURSQUARE_API_KEY"}]
-    url = "https://places-api.foursquare.com/places/search"
-    headers = {"accept": "application/json", "X-Places-Api-Version": "2025-06-17", "authorization": api_key}
-    params = {"near": city, "query": query, "limit": 10}
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, params=params)
-        if response.status_code != 200:
-            return [{"error": f"Foursquare API error: {response.text}"}]
-        results = response.json().get("results", [])
-        if not results:
-            return [{"message": f"No results found for '{query}' in {city}."}]
-        extracted = []
-        for place in results:
-            address = place['location']['formatted_address']
+    query = {
+        "practice_city_name": {"$regex": f"^{practice_city_name.strip()}$", "$options": "i"},
+        "entity_type": entity_type
+    }
+
+    if npi_number:
+        query["npi_number"] = npi_number
+
+    if provider_first_name:
+        query["provider_first_name"] = {"$regex": f"^{provider_first_name.strip()}$", "$options": "i"}
+
+    if provider_last_name_legal:
+        query["provider_last_name_legal"] = {"$regex": f"^{provider_last_name_legal.strip()}$", "$options": "i"}
+
+    if practice_state_name:
+        query["practice_state_name"] = practice_state_name.strip().upper()
+
+    if practice_street_address:
+        query["practice_street_address"] = {"$regex": f".*{practice_street_address.strip()}.*", "$options": "i"}
+
+    if primary_taxonomy_description:
+        query["primary_taxonomy_description"] = {"$regex": f".*{primary_taxonomy_description.strip()}.*", "$options": "i"}
+
+    try:
+        client = pymongo.MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+        db = client[DB_NAME]
+        collection = db[COLLECTION_NAME]
+        print("✅ Connected to MongoDB.")
+
+        raw_results = list(collection.find(query, {"_id": 0}).limit(limit))
+        print(f"🔍 Found {len(raw_results)} result(s).")
+
+        enriched_results = []
+        for rec in raw_results:
+            address = f"{rec.get('practice_street_address', '')}, {rec.get('practice_city_name', '')}, {rec.get('practice_state_name', '')}"
             lat, lon = await get_geocode_locationiq(address)
-            extracted.append({
-                "name": place.get("name", "Unknown"),
-                "categories": [cat.get("name") for cat in place.get("categories", [])],
-                "address": address,
-                "latitude": lat,
-                "longitude": lon,
-                "phone": place.get("tel"),
-                "website": place.get("website")
-            })
-        return extracted
+            rec["latitude"] = lat
+            rec["longitude"] = lon
+            enriched_results.append(rec)
+
+        return enriched_results
+
+    except ConnectionFailure as conn_fail:
+        print(f"❌ MongoDB connection failed. {conn_fail}")
+        return []
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return []
+    finally:
+        if client:
+            client.close()
+            print("🔌 MongoDB connection closed.")
     
 
 @tool
@@ -162,4 +216,4 @@ def get_air_quality(zip_code: str) -> dict:
 
     except Exception as e:
         return {"error": str(e)}
-    
+

@@ -213,21 +213,37 @@ async def health_centers_agent(state: State) -> Command[Literal["supervisor"]]:
             llm,
             tools=[get_health_centers],
             prompt="""
-                You are an expert in finding health centers like hospitals, clinics, blood test centers etc.
+                You are an expert in locating healthcare centers such as hospitals, clinics, emergency departments, and other medical facilities.
 
-                Use the get_health_centers tool to return the top 5 health centers.
+                Important Rules:
+                - Only use the `get_health_centers` tool if the user's query is related to **Texas (TX)**.
+                - If the user asks for health centers in another state (e.g., CA, NY), respond with an informative HTML message stating that we currently only support Texas data.
+                - Never fabricate or guess health center results from your own knowledge or memory.
 
-                For each result, include:
-                - Name
-                - Category (hospitals, clinics etc)
-                - Address
-                - Latitude and Longitude (always include)
-                - Phone (if available)
-                - Website (as a clickable link)
+                When valid (TX-related), use the `get_health_centers` tool and format each result in clean HTML with the following fields:
+
+                - **Name**: Use `provider_org_name_legal` (for organizations) or construct from `provider_first_name` and `provider_last_name_legal` (for individuals).
+                - **Category**: Use `primary_taxonomy_description` (e.g., Emergency Medicine, Pediatrics).
+                - **Address**: Combine `practice_street_address`, `practice_city_name`, `practice_state_name`, and `practice_postal_code`.
+                - **Latitude and Longitude**: Use `latitude` and `longitude` (always include).
+                - **Phone**: Use `practice_phone_number` if available.
+                - **NPI Number**: Display `npi_number`.
+                - **Specialties**: List all entries in `taxonomy_descriptions_list`, separated by commas.
+
+                Format your response using `<div>` and `<ul>` tags. Do not return JSON or plain text.
                 
-                `latitude` and `longitude` must always be included.
-                Return the output in clean HTML format using <ul>/<li> or <div>. No JSON or plain text. Keep it structured and readable.
-        """
+                Make sure each result includes **latitude and longitude** explicitly. Format links or numbers where relevant for user-friendliness.
+
+                If the location is unsupported (i.e., not Texas), respond with:
+
+                ```html
+                <div class="health-centers-message">
+                <h2>Service Limitation Notice</h2>
+                <p>We currently provide healthcare center listings only for <strong>Texas (TX)</strong>.</p>
+                <p>If you're looking for services in another state, we recommend checking local health department websites or national directories.</p>
+                </div>
+            """
+
     )
     result = await agent.ainvoke(state)
     return Command(update={"messages": [HumanMessage(content=result["messages"][-1].content, name="health_centers_agent")]}, goto="supervisor")
