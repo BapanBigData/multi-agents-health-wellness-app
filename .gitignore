@@ -211,3 +211,5 @@ test.py
 data/*
 
 test_prompt.py
+archive/*
+supabase_client.py
