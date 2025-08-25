@@ -236,10 +236,12 @@ async def health_centers_agent(state: State) -> Command[Literal["supervisor"]]:
             - **All Specialties**: List all entries from `taxonomy_descriptions_list`, separated by commas
             - **Address**: Combine `practice_street_address`, `practice_city_name`, `practice_state_name`, and `practice_postal_code`
             - **Phone**: Use `practice_phone_number` if available
-            - **Coordinates**: Always include `latitude` and `longitude` explicitly
+            - **Latitude**: Use `latitude`
+            - **Longitude**: Use `longitude`
             - **Last Updated**: Show `last_update_date`
 
             Use `<div>`, `<ul>`, `<li>`, and `<strong>` tags for clean formatting. Do not return JSON or plain text.
+            Always include `latitude` and `longitude` explicitly.
 
             **Example HTML Structure:**
             ```html
@@ -254,7 +256,8 @@ async def health_centers_agent(state: State) -> Command[Literal["supervisor"]]:
                     <li><strong>All Specialties:</strong> [taxonomy_descriptions_list]</li>
                     <li><strong>Address:</strong> [full address]</li>
                     <li><strong>Phone:</strong> [practice_phone_number]</li>
-                    <li><strong>Coordinates:</strong> [latitude], [longitude]</li>
+                    <li><strong>Latitude:</strong> [latitude]</li>
+                    <li><strong>Longitude:</strong> [longitude]</li>
                     <li><strong>Last Updated:</strong> [last_update_date]</li>
                 </ul>
             </div>
