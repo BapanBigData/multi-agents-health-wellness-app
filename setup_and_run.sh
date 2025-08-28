@@ -44,5 +44,5 @@ fi
 
 # STEP 6: Start FastAPI server on port 7860 and keep it running
 echo "🚀 Starting FastAPI server on port 7860..."
-nohup uvicorn app.main:app --host 0.0.0.0 --port 7860 > server.log 2>&1 &
+nohup uvicorn src.main:app --host 0.0.0.0 --port 7860 > server.log 2>&1 &
 echo "✅ FastAPI server running in background. Check logs with: tail -f server.log"

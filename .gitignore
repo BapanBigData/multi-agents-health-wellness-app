@@ -213,3 +213,6 @@ data/*
 test_prompt.py
 archive/*
 supabase_client.py
+app/
+
+phs_test.py
